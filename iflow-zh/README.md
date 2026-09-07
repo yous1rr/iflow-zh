@@ -18,7 +18,7 @@ omp
 /sc:setup
 ```
 
-`/sc:setup` 会把 `modelRoles.default` 与 `task.agentModelOverrides` 合并进 `~/.omp/agent/config.yml`、写用户级 `~/.omp/agent/AGENTS.md`，合并前各留一份 `.bak`，不会覆盖你已经选过的值。装完后无需往任何项目里拷文件。
+`/sc:setup` 只写用户级 `~/.omp/agent/AGENTS.md`（合并前留一份 `.bak`）。iflow 不注入任何模型配置：`modelRoles`（含 `@slow:high` 这类思考深度后缀）、`task.agentModelOverrides` 与网络故障回退链 `retry.fallbackChains` 全部由你自己在 config.yml 配置，iflow 不创建、不覆盖、不删除，旧版 iflow 写入的键也原样保留。omp 原生保证 task 子 Agent 继承其解析 Role 的思考深度与回退链。
 
 > 说明：`npx iflow-zh` 这条路径尚未针对已发布到 npm registry 的包做过实跑验证；`omp plugin install` + `/sc:setup` 是仓库内已验证的路径。
 
@@ -27,9 +27,9 @@ omp
 | 组件 | 作用 |
 | :--- | :--- |
 | `extension/iflow.ts` | 注册全部 21 个 `/sc:*` 命令；把主会话收窄为调度者工具集；路由 `task` 调用到对应专家；`tool_call` 钩子兜底门禁剩余入口 |
-| `framework/` | `@` 导入链（`IFLOW.md` 拉入旗帜 / 模式 / 规则）+ `commands/sc/*.md` 的 21 条命令正文，按 `import.meta.url` 解析 |
+| `framework/` | `commands/sc/*.md` 的 21 条命令正文，按 `import.meta.url` 解析 |
 | `agents/` | 15 个专家 Agent 定义，被 omp task-agent 发现扫描，可被 `task` 按名称委派 |
-| `rules/` | `iflow-sticky.md`（执行方硬约束，随 `task` 转发到每个专家）与 `iflow-dispatch.md`（调度者指令，仅主会话可见） |
+| `rules/` | `iflow-framework.md`（完整框架配置，always-apply，注入主会话与每个子 Agent）、`iflow-sticky.md`（执行方硬约束，随 `task` 转发到每个专家）与 `iflow-dispatch.md`（调度者指令，仅主会话可见） |
 | `templates/` | `/sc:setup` 合并进用户级 `config.yml` 与 `AGENTS.md` 的模板 |
 
 ## 主会话调度者模式

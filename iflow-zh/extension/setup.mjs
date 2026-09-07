@@ -1,19 +1,29 @@
 #!/usr/bin/env node
 /**
- * Writes the two things an omp plugin cannot contribute by discovery: settings
- * and a context file. Shared by two callers, which is why this is `.mjs` rather
- * than `.ts` — the extension runs under Bun (TS is fine), `bin/install.mjs`
- * runs under the user's plain Node (no TS loader).
+ * Writes the one thing an omp plugin cannot contribute by discovery: the
+ * user-level context file. Shared by two callers, which is why this is `.mjs`
+ * rather than `.ts` — the extension runs under Bun (TS is fine),
+ * `bin/install.mjs` runs under the user's plain Node (no TS loader).
  *
- *   1. `<agentDir>/config.yml`  — key-wise merge of templates/config.patch.yml.
- *      omp's own `Settings.set` -> `setByPath` assigns the whole record, so
- *      `omp config set task.agentModelOverrides '<json>'` would drop a user's
- *      pre-existing overrides. We read, merge, write, and leave a `.bak`.
- *   2. `<agentDir>/AGENTS.md`   — a thin shell whose body is one `@` import
- *      pointing at this package's `framework/IFLOW.md`. Never inline the
- *      framework text: always-apply rule content is deduped against loaded
- *      context files, so a second copy of rules/iflow-sticky.md here would get
- *      one of the two silently dropped.
+ *   `<agentDir>/AGENTS.md` — a pure shell. The framework text is never
+ *      inlined into a context file: always-apply rule content is deduped
+ *      against loaded context files, so a duplicate here would silently drop
+ *      one of the two copies — and context files never reach `task` subagents
+ *      anyway. The framework travels as the generated always-apply rule
+ *      `rules/iflow-framework.md` (see scripts/build-agents.mjs), which omp
+ *      injects into the main session and every subagent.
+ *
+ *   `<agentDir>/config.yml` — NOT written. iflow seeds no model
+ *      configuration: providers, `modelRoles` assignments (including
+ *      thinking-depth suffixes like `@slow:high`), `task.agentModelOverrides`
+ *      and `retry.fallbackChains` stay in the user's own config.yml. omp
+ *      natively keys every subagent's retry-fallback chain and thinking depth
+ *      off the Role its model resolves to (task/executor.ts
+ *      resolveSubagentInheritedRetryFallbackChain / installSubagentRetryFallbackChain),
+ *      so a Role with a configured chain needs no help from iflow.
+ *      Pre-existing iflow seeds from older versions are left untouched, never
+ *      deleted. `templates/config.patch.yml` documents this; `mergeConfig` is
+ *      the no-op boundary that keeps the setup report shape stable.
  *
  * Occupying `<agentDir>/AGENTS.md` shadows every other user-level context file
  * (native has the highest provider priority and only one user-level file
@@ -29,12 +39,8 @@ import { existsSync, copyFileSync, mkdirSync, readFileSync, writeFileSync } from
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { parse as parseYaml, parseDocument } from "yaml";
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-/** Marker the template uses for the resolved framework entry path. */
-const ENTRY_PLACEHOLDER = "@__FRAMEWORK_ENTRY__";
 
 /**
  * User-level context files that `<agentDir>/AGENTS.md` shadows once it exists,
@@ -67,19 +73,6 @@ function normalizeProfile(value) {
   return normalized;
 }
 
-/**
- * Locate the installed copy of this package. Under `omp plugin install` this
- * file already lives inside the plugin root, so its own module path is the
- * answer; `bin/install.mjs` passes the freshly installed root explicitly.
- */
-export function resolveFrameworkEntry(pkgRoot = PKG_ROOT) {
-  const entry = path.join(pkgRoot, "framework", "IFLOW.md");
-  if (!existsSync(entry)) {
-    throw new Error(`iflow-zh: framework entry missing at ${entry} — run scripts/build-agents.mjs`);
-  }
-  return entry;
-}
-
 /** `@` imports accept a `~/` prefix; prefer it so the file survives a home move. */
 function toImportToken(target, home = os.homedir()) {
   const relative = path.relative(home, target);
@@ -96,56 +89,16 @@ function backup(file) {
 }
 
 /**
- * Merge the template's settings into the user's config.yml. `parseDocument`
- * keeps the user's comments and key order intact; we only set the leaves we
- * own, so nothing else in the file is rewritten.
+ * iflow owns no settings keys: providers, models, role assignments, and
+ * fallback chains stay in the user's own config.yml. `mergeConfig` exists as
+ * a no-op boundary so the setup report keeps a stable shape (a plugin cannot
+ * contribute settings by discovery, and nothing here may silently rewrite a
+ * user's model configuration — including pre-existing iflow seeds, which we
+ * deliberately leave untouched rather than delete).
  */
 export function mergeConfig(agentDir, { dryRun = false } = {}) {
-  const patchPath = path.join(PKG_ROOT, "templates", "config.patch.yml");
-  const patch = parseYaml(readFileSync(patchPath, "utf8"));
   const configPath = path.join(agentDir, "config.yml");
-  const existing = existsSync(configPath) ? readFileSync(configPath, "utf8") : "";
-  const doc = parseDocument(existing);
-  if (doc.contents === null) doc.contents = doc.createNode({});
-
-  const added = [];
-  const kept = [];
-  const alreadySet = [];
-
-  /**
-   * Fill one leaf. Never overwrite: a value the user chose outranks ours.
-   * Distinguish "user picked something else" (`kept`, a real conflict worth
-   * reporting) from "already equals ours" (`alreadySet`, just idempotence) —
-   * reporting the latter as a conflict would be a false claim.
-   */
-  function fill(keyPath, value) {
-    const label = keyPath.join(".");
-    const current = doc.getIn(keyPath);
-    if (current === undefined || current === null) {
-      doc.setIn(keyPath, value);
-      added.push(label);
-      return;
-    }
-    if (current === value) alreadySet.push(label);
-    else kept.push(`${label}=${current}`);
-  }
-
-  const defaultRole = patch?.modelRoles?.default;
-  if (typeof defaultRole === "string") fill(["modelRoles", "default"], defaultRole);
-
-  const overrides = patch?.task?.agentModelOverrides ?? {};
-  for (const [agent, role] of Object.entries(overrides)) {
-    fill(["task", "agentModelOverrides", agent], role);
-  }
-
-  const text = doc.toString();
-  let backupPath = null;
-  if (!dryRun && added.length) {
-    mkdirSync(agentDir, { recursive: true });
-    backupPath = backup(configPath);
-    writeFileSync(configPath, text);
-  }
-  return { path: configPath, added, kept, alreadySet, backupPath, text };
+  return { path: configPath, added: [], kept: [], alreadySet: [], backupPath: null, text: null, dryRun };
 }
 
 /**
@@ -154,7 +107,6 @@ export function mergeConfig(agentDir, { dryRun = false } = {}) {
  */
 export function writeContextShell(agentDir, { pkgRoot = PKG_ROOT, home = os.homedir(), dryRun = false } = {}) {
   const template = readFileSync(path.join(pkgRoot, "templates", "AGENTS.md"), "utf8");
-  const entryToken = toImportToken(resolveFrameworkEntry(pkgRoot), home);
 
   const shadowed = SHADOWED_CANDIDATES.map(rel => path.join(home, rel)).filter(file => existsSync(file));
   const shadowSection = shadowed.length
@@ -167,7 +119,7 @@ export function writeContextShell(agentDir, { pkgRoot = PKG_ROOT, home = os.home
       ].join("\n")
     : "";
 
-  const body = template.replace(ENTRY_PLACEHOLDER, `@${entryToken}`) + shadowSection;
+  const body = template + shadowSection;
   const target = path.join(agentDir, "AGENTS.md");
 
   let backupPath = null;
@@ -176,7 +128,7 @@ export function writeContextShell(agentDir, { pkgRoot = PKG_ROOT, home = os.home
     backupPath = backup(target);
     writeFileSync(target, body);
   }
-  return { path: target, entry: entryToken, shadowed, backupPath, text: body };
+  return { path: target, frameworkRule: "rules/iflow-framework.md", shadowed, backupPath, text: body };
 }
 
 /** Run both writers. Returns a report the caller renders. */
@@ -192,24 +144,13 @@ export function formatReport(report) {
     report.dryRun ? "iflow-zh /sc:setup (dry run)" : "iflow-zh /sc:setup",
     "",
     `agent 目录: ${report.agentDir}`,
-    `框架入口:   ${report.context.entry}`,
+    `框架规则:   ${report.context.frameworkRule}（注入主会话与全部 task 子 Agent）`,
     "",
     `设置: ${report.config.path}`,
+    "  iflow 不写入任何模型配置（modelRoles / task.agentModelOverrides /",
+    "  retry.fallbackChains 全部由你自己的 config.yml 控制，iflow 不创建、",
+    "  不覆盖、不删除；旧版 iflow 留下的键原样保留）。",
   ];
-  lines.push(
-    report.config.added.length
-      ? `  新增 ${report.config.added.length} 个键: ${report.config.added.join(", ")}`
-      : "  没有新增键",
-  );
-  if (report.config.alreadySet?.length) {
-    lines.push(`  已是目标值 ${report.config.alreadySet.length} 个键，未改动`);
-  }
-  if (report.config.kept.length) {
-    lines.push(
-      `  你自己设过的 ${report.config.kept.length} 个键保持原值（未覆盖）: ${report.config.kept.join(", ")}`,
-    );
-  }
-  if (report.config.backupPath) lines.push(`  备份: ${report.config.backupPath}`);
 
   lines.push("", `上下文: ${report.context.path}`);
   if (report.context.backupPath) lines.push(`  备份: ${report.context.backupPath}`);
@@ -223,23 +164,20 @@ export function formatReport(report) {
   return lines.join("\n");
 }
 
-/** Verify whether a live session already has setup applied. */
-export function checkApplied({ agentDir = resolveAgentDir(), overrideKeys, contextText } = {}) {
-  const patch = parseYaml(readFileSync(path.join(PKG_ROOT, "templates", "config.patch.yml"), "utf8"));
-  const expected = overrideKeys ?? Object.keys(patch?.task?.agentModelOverrides ?? {});
-  const configPath = path.join(agentDir, "config.yml");
-  let missingOverrides = expected;
-  if (existsSync(configPath)) {
-    const current = parseYaml(readFileSync(configPath, "utf8"))?.task?.agentModelOverrides ?? {};
-    missingOverrides = expected.filter(key => current[key] === undefined);
-  }
+/**
+ * Verify whether a live session already has setup applied. iflow seeds no
+ * config keys anymore, so the only setup-owned artifact worth checking is the
+ * AGENTS.md shell carrying the framework-rule note. Any `modelRoles` /
+ * `task.agentModelOverrides` values in the user's config.yml are theirs
+ * (possibly left over from an older iflow) and are not validated or touched
+ * here.
+ */
+export function checkApplied({ agentDir = resolveAgentDir(), contextText } = {}) {
   const text = contextText ?? (existsSync(path.join(agentDir, "AGENTS.md"))
     ? readFileSync(path.join(agentDir, "AGENTS.md"), "utf8")
     : "");
-  const entryToken = toImportToken(resolveFrameworkEntry());
   return {
     agentDir,
-    missingOverrides,
-    hasEntry: text.includes(`@${entryToken}`),
+    hasFrameworkNote: text.includes("iflow-framework.md"),
   };
 }

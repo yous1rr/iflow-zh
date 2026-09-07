@@ -383,21 +383,20 @@ export default function iflowExtension(pi: ExtensionAPI): void {
         "行为命令（将命令体展开为下一条提示）：",
         ...commands.map((c) => `- /sc:${c.name}${c.description ? ` — ${c.description}` : ""}`),
         "",
-        "安装：/sc:setup 写入用户级 config.yml 键与 AGENTS.md 条目。",
-        `调度者：/sc:dispatch ${dispatchGateOn ? "开启（落地工具已扣留）" : "关闭"}`,
+        "安装：/sc:setup 写入用户级 AGENTS.md 条目；模型角色与回退链由你在 config.yml 配置。",
         "专家角色（task 工具）：包内 agents/ 目录，共 15 个角色。",
         "任务路由：未显式指定的角色会被分类，显式指定的角色予以保留。",
-        "模型角色：/sc:roles 展示解析后的映射。",
-        "规则：iflow-sticky（所有 agent）、iflow-dispatch（仅主会话）。",
+        "模型角色：iflow 不注入映射；/sc:roles 展示 omp 内建角色的解析结果。子 Agent 自动继承其解析 Role 的思考深度（如 @slow:high）与 retry.fallbackChains 回退链。",
+        "规则：iflow-sticky + iflow-framework（所有 agent）、iflow-dispatch（仅主会话）。",
       ];
       report(ctx, lines.join("\n"));
     },
   });
 
   pi.registerCommand("sc:roles", {
-    description: "展示 iflow 角色到已解析模型的映射",
+    description: "展示 omp 模型角色的解析结果（映射由你的 config.yml 决定）",
     handler: async (_args, ctx) => {
-      const lines = ["iflow 模型角色映射", ""];
+      const lines = ["omp 模型角色解析结果（映射由你的 config.yml 决定）", ""];
       for (const role of MODEL_ROLES) {
         lines.push(`@${role} → ${describeModel(ctx.models.resolve(`@${role}`))}`);
       }
@@ -406,7 +405,7 @@ export default function iflowExtension(pi: ExtensionAPI): void {
   });
 
   pi.registerCommand("sc:setup", {
-    description: "写入 iflow 用户级设置与 AGENTS.md 条目（整机范围）",
+    description: "写入 iflow 用户级 AGENTS.md 条目（整机范围）",
     handler: async (args: string, ctx) => {
       const dryRun = /(^|\s)(--dry-run|-n)(\s|$)/.test(typeof args === "string" ? args : "");
       try {
@@ -486,13 +485,8 @@ export default function iflowExtension(pi: ExtensionAPI): void {
 
     try {
       const status = checkApplied();
-      if (status.missingOverrides.length || !status.hasEntry) {
-        const missing: string[] = [];
-        if (status.missingOverrides.length) {
-          missing.push(`${status.missingOverrides.length} 个 Agent 角色映射`);
-        }
-        if (!status.hasEntry) missing.push("AGENTS.md 的框架入口");
-        lines.push(`缺少 ${missing.join(" 和 ")}（${status.agentDir}）。跑 /sc:setup 补上。`);
+      if (!status.hasFrameworkNote) {
+        lines.push(`AGENTS.md 缺少框架规则说明（${status.agentDir}）。跑 /sc:setup 补上。`);
       }
     } catch (error) {
       lines.push(`iflow setup 检查失败：${error instanceof Error ? error.message : error}`);

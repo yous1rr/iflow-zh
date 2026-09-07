@@ -1,30 +1,40 @@
 #!/usr/bin/env node
 /**
  * Generates the build outputs of the iflow-zh plugin package from `.iflow/`,
- * which stays the single source of truth. Two directories are generated and
- * must never be hand-edited:
+ * which stays the single source of truth. Two directories and one rule are
+ * generated and must never be hand-edited:
  *
  *   agents/     <- .iflow/agents/**.md, frontmatter adapted for omp task agents
- *   framework/  <- the `@` import chain reachable from .iflow/IFLOW.md,
- *                  plus .iflow/commands/sc/*.md (command bodies)
+ *   framework/  <- .iflow/commands/sc/*.md (command bodies)
+ *   rules/iflow-framework.md <- the `@` import chain reachable from
+ *                  .iflow/IFLOW.md rendered as one always-apply rule scoped to
+ *                  task subagents, never the main dispatcher, so subagents
+ *                  receive the full framework configuration (omp filters
+ *                  context files out of subagents, rules are forwarded)
  *
  * Frontmatter adaptation (inherited from the previous scripts/sync-omp-agents.mjs):
  *
- *   kept:    name, description, model (Role aliases only)
+ *   kept:    name, description, model (Role aliases only; a thinking-depth
+ *            suffix like `@slow:high` passes ROLE_MODEL and is preserved
+ *            verbatim — omp expands it natively)
  *   added:   spawns: "*" for the omni coordinator agent
  *   dropped: category / tools (personas inherit all tools), when-to-use,
  *            mcp-servers, agent-type, concrete model selectors, color,
  *            allowed-tools/-mcps, capabilities, inherit-* and any other
  *            Claude-specific keys
  *
- * After writing, three assertions run. Each failure exits non-zero, because a
+ * After writing, two assertions run. Each failure exits non-zero, because a
  * dangling agent name that only surfaces at runtime costs a user a broken
  * `task` call, while a build failure costs nobody anything:
  *
  *   1. every `@` import in the chain resolves to a real file
- *   2. every agent name referenced by templates/config.patch.yml or by
- *      TASK_ROUTES in extension/iflow.ts exists (package agent or omp builtin)
- *   3. every generated agent has a Role mapping or a routing rule
+ *   2. every agent name referenced by TASK_ROUTES in extension/iflow.ts
+ *      exists (package agent or omp builtin)
+ *
+ * Note: templates/config.patch.yml no longer carries a
+ * `task.agentModelOverrides` block — iflow seeds no model/role mappings
+ * (they stay user-owned in config.yml), so there is nothing to cross-check
+ * here anymore.
  *
  * Run from anywhere: node iflow-zh/scripts/build-agents.mjs
  */
@@ -151,14 +161,9 @@ function collectChainFiles() {
 }
 
 function buildFramework() {
+  const chain = collectChainFiles();
   rmSync(DEST_FRAMEWORK, { recursive: true, force: true });
   mkdirSync(DEST_COMMANDS, { recursive: true });
-  const chain = collectChainFiles();
-  for (const rel of chain) {
-    const dest = path.join(DEST_FRAMEWORK, rel);
-    mkdirSync(path.dirname(dest), { recursive: true });
-    copyFileSync(path.join(IFLOW, rel), dest);
-  }
   const commands = readdirSync(SRC_COMMANDS).filter((entry) => entry.endsWith(".md")).sort();
   for (const entry of commands) {
     copyFileSync(path.join(SRC_COMMANDS, entry), path.join(DEST_COMMANDS, entry));
@@ -166,24 +171,41 @@ function buildFramework() {
   return { chain, commands };
 }
 
-/** Collects the keys of the `task.agentModelOverrides` block, indentation-scoped. */
-function readOverrideKeys() {
-  const file = path.join(PKG, "templates", "config.patch.yml");
-  const lines = readFileSync(file, "utf8").replace(/\r\n/g, "\n").split("\n");
-  const start = lines.findIndex((line) => /^\s*agentModelOverrides:\s*$/.test(line));
-  if (start === -1) throw new Error(`${file}: no agentModelOverrides block`);
-  const outerIndent = /^(\s*)/.exec(lines[start])[1].length;
-  const keys = [];
-  for (const line of lines.slice(start + 1)) {
-    if (!line.trim() || line.trimStart().startsWith("#")) continue;
-    const indent = /^(\s*)/.exec(line)[1].length;
-    if (indent <= outerIndent) break;
-    const match = /^\s*([A-Za-z0-9_-]+):\s*"?(@[A-Za-z0-9_:-]+)"?\s*$/.exec(line);
-    if (!match) throw new Error(`${file}: unparsable override line: ${line}`);
-    keys.push(match[1]);
-  }
-  if (!keys.length) throw new Error(`${file}: agentModelOverrides block is empty`);
-  return keys;
+/**
+ * Renders the framework chain as the always-apply rule `rules/iflow-framework.md`.
+ * Context files (`AGENTS.md` and friends) never reach `task` subagents — omp
+ * filters them out by file name — but rules are forwarded, so this is the
+ * channel that gives every subagent the full framework configuration. The
+ * `agents` allowlist scopes the rule to task subagents and keeps it out of the
+ * main dispatcher session: omp matches those globs against the session's agent
+ * name (`main` is reserved for the top-level session, a named subagent
+ * evaluates as its definition name, an unnamed one as `sub`), and the matcher
+ * is a pure allowlist without negation, so "every task subagent, never main"
+ * must enumerate the roster — `sub` plus every agent definition name this
+ * package ships or routes to. IFLOW.md's entry boilerplate and every `@` import
+ * line stay out; the downstream files are inlined in chain order, CRLF
+ * normalized, parts separated by blank lines.
+ */
+function buildAgentConfigRule(chain, agentNames) {
+  const agentRoster = ["sub", ...new Set([...agentNames, ...BUILTIN_AGENTS].sort())].join(", ");
+  const frontmatter = ["---", "alwaysApply: true", `agents: [${agentRoster}]`, "---"].join("\n");
+  const note = [
+    "# iflow V8 — 完整框架配置（构建产物，勿手改）",
+    "",
+    "由 scripts/build-agents.mjs 从 .iflow/ 导入链生成（FLAGS → RULES → 五个行为模式）。",
+    "omp 将本规则注入全部 task 子 Agent（`agents:` 白名单枚举，主会话不加载本规则）；调度者指令在 rules/iflow-dispatch.md，仅主会话。",
+  ].join("\n");
+  const parts = chain
+    .filter((rel) => rel !== "IFLOW.md")
+    .map((rel) =>
+      readFileSync(path.join(IFLOW, rel), "utf8")
+        .replace(/\r\n/g, "\n")
+        .split("\n")
+        .filter((line) => !/^@[A-Za-z0-9._/-]+\.md\s*$/.test(line.trim()))
+        .join("\n")
+        .trim(),
+    );
+  writeFileSync(path.join(PKG, "rules", "iflow-framework.md"), [frontmatter, note, ...parts].join("\n\n") + "\n");
 }
 
 /** Collects the `agent:` values of TASK_ROUTES in the packaged extension. */
@@ -201,8 +223,9 @@ function readRoutedAgents() {
 
 const agentNames = buildAgents();
 const { chain, commands } = buildFramework();
+buildAgentConfigRule(chain, agentNames);
 
-const referenced = new Set([...readOverrideKeys(), ...readRoutedAgents()]);
+const referenced = new Set([...readRoutedAgents()]);
 const known = new Set([...agentNames, ...BUILTIN_AGENTS]);
 
 const dangling = [...referenced].filter((name) => !known.has(name)).sort();
@@ -210,10 +233,10 @@ if (dangling.length) {
   fail("referenced agent names that no definition provides:", dangling);
 }
 
-const unrouted = agentNames.filter((name) => !referenced.has(name)).sort();
-if (unrouted.length) {
-  fail("agents with neither a Role mapping nor a routing rule:", unrouted);
-}
+// NOTE: the former "every agent has a Role mapping or a routing rule"
+// assertion is gone with the config.patch.yml override block: iflow seeds no
+// role mappings, so an agent may be reachable by name (omp task-agent
+// discovery) without appearing in TASK_ROUTES — that is fine.
 
 if (failures.length) {
   for (const { headline, names } of failures) {
@@ -224,5 +247,5 @@ if (failures.length) {
 }
 
 console.log(
-  `build-agents: ${agentNames.length} agents, ${chain.length} chain files, ${commands.length} commands`,
+  `build-agents: ${agentNames.length} agents, ${chain.length} chain files, 1 rule, ${commands.length} commands`,
 );
