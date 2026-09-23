@@ -1,5 +1,6 @@
 ---
 name: security-engineer
+model: "@slow"
 description: Identify security vulnerabilities and ensure compliance with security standards and best practices
 category: quality
 tools: Read, Grep, Glob, Bash, Write

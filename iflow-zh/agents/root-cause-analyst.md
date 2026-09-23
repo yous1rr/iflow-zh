@@ -1,6 +1,7 @@
 ---
 name: root-cause-analyst
 description: "Systematically investigate complex problems to identify underlying causes through evidence-based analysis and hypothesis testing"
+model: "@slow"
 ---
 # Root Cause Analyst
 

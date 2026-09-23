@@ -13,6 +13,10 @@
  *
  * Step 2 must target the INSTALLED copy, not this cache directory, so the `@`
  * import in `AGENTS.md` points at a path that survives cache eviction.
+ *
+ * `--uninstall` reverses both steps: it restores each file from the backup
+ * manifest written at setup time (located by path, verified by sha256), then
+ * `omp plugin uninstall`s the plugin.
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -33,6 +37,33 @@ function capture(command, args) {
   const result = spawnSync(command, args, { encoding: "utf8", shell: process.platform === "win32" });
   if (result.error || result.status !== 0) return null;
   return result.stdout.trim();
+}
+
+// `--uninstall` reverses a prior `npx iflow-zh`: restore files from the backup
+// manifest (via the local setup.mjs — restoration reads only the agent dir, so
+// it does not need the installed plugin root), then remove the plugin from omp.
+const argv = process.argv.slice(2);
+if (argv.includes("--uninstall") || argv.includes("-u")) {
+  const dryRun = argv.includes("--dry-run") || argv.includes("-n");
+  const setupUrl = pathToFileURL(path.join(PKG_ROOT, "extension", "setup.mjs")).href;
+  const { uninstall, formatUninstallReport } = await import(setupUrl);
+  const agentDir = capture("omp", ["config", "path"]);
+  try {
+    console.log(formatUninstallReport(uninstall(agentDir ? { agentDir, dryRun } : { dryRun })));
+  } catch (error) {
+    console.error(`iflow-zh: 恢复备份失败：${error instanceof Error ? error.message : error}`);
+  }
+  console.log(`iflow-zh: removing ${manifest.name} from omp`);
+  const pluginArgs = ["plugin", "uninstall", manifest.name];
+  if (dryRun) pluginArgs.push("--dry-run");
+  const status = run("omp", pluginArgs);
+  if (status !== 0) {
+    console.error(
+      "iflow-zh: `omp plugin uninstall` failed (plugin may not be installed, or omp is not on PATH).",
+    );
+    process.exit(status);
+  }
+  process.exit(0);
 }
 
 console.log(`iflow-zh: installing ${spec} into omp's plugin root`);

@@ -1,93 +1,57 @@
 ---
 name: cleanup
-description: "系统化清理代码、移除死代码并优化项目结构"
+description: "只读报告本会话拥有的后台异步任务快照（omp 18.1.13 无插件侧取消/清理接口）"
 category: workflow
-complexity: standard
-mcp-servers: [sequential, context7]
-personas: [architect, quality, security]
+complexity: simple
 ---
 
-# /sc:cleanup - Code and Project Cleanup
+# /sc:cleanup - 会话后台任务快照（只读）
 
-## Triggers
-- Code maintenance and technical debt reduction requests
-- Dead code removal and import optimization needs
-- Project structure improvement and organization requirements
-- Codebase hygiene and quality improvement initiatives
+## 定位
+
+`/sc:cleanup` 是**状态命令**：由 `iflow-zh/extension/iflow.ts` 直接注册并执行
+（Markdown 加载器跳过本文件，避免重复注册），不展开为提示词。它调用 omp 扩展
+API `ctx.getAsyncJobSnapshot()`，只读列出**当前会话拥有的**后台异步任务
+（task 子代理等）与投递状态。本命令不执行任何变更。
 
 ## Usage
+
 ```
-/sc:cleanup [target] [--type code|imports|files|all] [--safe|--aggressive] [--interactive]
-```
-
-## Behavioral Flow
-1. **Analyze**: Assess cleanup opportunities and safety considerations across target scope
-2. **Plan**: Choose cleanup approach and activate relevant personas for domain expertise
-3. **Execute**: Apply systematic cleanup with intelligent dead code detection and removal
-4. **Validate**: Ensure no functionality loss through testing and safety verification
-5. **Report**: Generate cleanup summary with recommendations for ongoing maintenance
-
-Key behaviors:
-- Multi-persona coordination (architect, quality, security) based on cleanup type
-- Framework-specific cleanup patterns via Context7 MCP integration
-- Systematic analysis via Sequential MCP for complex cleanup operations
-- Safety-first approach with backup and rollback capabilities
-
-## MCP Integration
-- **Sequential MCP**: Auto-activated for complex multi-step cleanup analysis and planning
-- **Context7 MCP**: Framework-specific cleanup patterns and best practices
-- **Persona Coordination**: Architect (structure), Quality (debt), Security (credentials)
-
-## Tool Coordination
-- **Read/Grep/Glob**: Code analysis and pattern detection for cleanup opportunities
-- **Edit/MultiEdit**: Safe code modification and structure optimization
-- **TodoWrite**: Progress tracking for complex multi-file cleanup operations
-- **Task**: Delegation for large-scale cleanup workflows requiring systematic coordination
-
-## Key Patterns
-- **Dead Code Detection**: Usage analysis → safe removal with dependency validation
-- **Import Optimization**: Dependency analysis → unused import removal and organization
-- **Structure Cleanup**: Architectural analysis → file organization and modular improvements
-- **Safety Validation**: Pre/during/post checks → preserve functionality throughout cleanup
-
-## Examples
-
-### Safe Code Cleanup
-```
-/sc:cleanup src/ --type code --safe
-# Conservative cleanup with automatic safety validation
-# Removes dead code while preserving all functionality
+/sc:cleanup [--json] [--help]
 ```
 
-### Import Optimization
-```
-/sc:cleanup --type imports --preview
-# Analyzes and shows unused import cleanup without execution
-# Framework-aware optimization via Context7 patterns
-```
+## Behavior
 
-### Comprehensive Project Cleanup
-```
-/sc:cleanup --type all --interactive
-# Multi-domain cleanup with user guidance for complex decisions
-# Activates all personas for comprehensive analysis
-```
+1. 默认：人类可读快照——运行中任务、最近任务（含已完成/失败/已取消）、投递状态（queued / delivering / nextRetryAt）
+2. `--json`：机器可读 JSON（`available` / `running` / `recent` / `delivery` / `sessionId` / `mutation`）
+3. `--help`：用法与限制说明
+4. `snapshot === null`（后台任务在该会话不可用）时如实报告，不伪造空结果
 
-### Framework-Specific Cleanup
-```
-/sc:cleanup components/ --aggressive
-# Thorough cleanup with Context7 framework patterns
-# Sequential analysis for complex dependency management
-```
+## 硬性限制（omp 18.1.13，如实声明）
+
+- 扩展 API 只有**只读快照**：`ctx.getAsyncJobSnapshot(): AsyncJobSnapshot | null`
+  （`running` / `recent` / `delivery`，每项仅 `id` / `type` / `status` / `label` / `startTime` / `agentId`）。
+- **没有任何公开的取消或清理接口**。`AsyncJobManager.cancelAll` /
+  `evictCompletedJobs` 是宿主内部方法，未暴露给插件；本命令不会、也不能终止或
+  删除任何任务，`mutation` 恒为 `{ cancel: false, prune: false }`。
+- 已完成任务行由 omp 宿主在完成后约 5 分钟自动淘汰（`recent` 窗口由宿主控制）。
+- 在外部进程中被 kill 的任务无法由插件"观测清除"——快照只反映宿主会话内存中
+  的真实状态。
+
+## 宿主侧处理途径（引导用户）
+
+- 终止运行中的任务：TUI 按 `Esc` 中断当前回合。
+- 查看任务：omp 内建 `/jobs`。
+- 任务行淘汰：宿主自动完成，无需插件干预。
 
 ## Boundaries
 
 **Will:**
-- Systematically clean code, remove dead code, and optimize project structure
-- Provide comprehensive safety validation with backup and rollback capabilities
-- Apply intelligent cleanup algorithms with framework-specific pattern recognition
+- 只读报告本会话拥有的任务快照与投递状态
+- 如实说明插件无取消/清理能力，并指向宿主机制
+- 支持 `--json` 供脚本消费
 
 **Will Not:**
-- Remove code without thorough safety analysis and validation
-- Override project-specific cleanup exclusions or architectural constraints
-- Apply cleanup operations that compromise functionality or introduce bugs
+- 取消、终止、删除或"清理"任何任务
+- 伪造"已清理"结果
+- 触碰其他会话（其他 ownerId）的任务

@@ -1,6 +1,7 @@
 ---
 name: security-engineer
 description: "Identify security vulnerabilities and ensure compliance with security standards and best practices"
+model: "@slow"
 ---
 # Security Engineer
 

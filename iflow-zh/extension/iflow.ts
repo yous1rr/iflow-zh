@@ -27,7 +27,12 @@
  * `/reload-plugins` refreshes commands; changes to this file or its hooks need
  * a session restart.
  */
-import type { ExtensionAPI, ExtensionContext } from "@oh-my-pi/pi-coding-agent";
+import type {
+  AsyncJobSnapshot,
+  AsyncJobSnapshotItem,
+  ExtensionAPI,
+  ExtensionContext,
+} from "@oh-my-pi/pi-coding-agent";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { stderr } from "node:process";
@@ -66,6 +71,15 @@ const MUTATORS: Record<string, true> = {
   eval: true,
   ast_edit: true,
 };
+
+/**
+ * Commands implemented directly in code below instead of prompt expansion.
+ * `loadCommands()` still parses their Markdown (so `/sc` help lists them and
+ * the shipped file documents the contract), but the generic registration loop
+ * skips them — registering `sc:<name>` twice would make one handler dead, and
+ * which one wins is an omp implementation detail, never relied on.
+ */
+const OPERATIONAL_COMMANDS: Record<string, true> = { cleanup: true };
 
 const TASK_ROUTES: Array<{ agent: string; patterns: RegExp[] }> = [
   {
@@ -313,6 +327,77 @@ function isSubagentSession(pi: ExtensionAPI): boolean {
   return yieldTool?.sourceInfo.source === "builtin";
 }
 
+// ---------------------------------------------------------------------------
+// /sc:cleanup — 会话后台任务快照（只读）。omp 18.1.13 的扩展 API 只有
+// ctx.getAsyncJobSnapshot()（AsyncJobSnapshot：running/recent/delivery），
+// 没有公开的取消或清理接口；本命令如实报告，绝不伪造"已清理"。
+// ---------------------------------------------------------------------------
+
+const CLEANUP_NO_CANCEL_NOTE =
+  "omp 18.1.13 只向插件暴露只读快照（ctx.getAsyncJobSnapshot），没有公开的取消/清理接口：" +
+  "本命令不会终止或删除任何任务。要停止运行中的任务请用宿主机制（TUI 按 Esc 中断当前回合、" +
+  "内建 /jobs 查看）；已完成任务行由 omp 宿主在约 5 分钟后自动淘汰。";
+
+function formatJobDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m${String(seconds % 60).padStart(2, "0")}s`;
+  return `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, "0")}m`;
+}
+
+function formatJobLine(job: AsyncJobSnapshotItem, now: number): string {
+  const age = formatJobDuration(Math.max(0, now - job.startTime));
+  const agent = job.agentId !== undefined ? ` @${job.agentId}` : "";
+  const label = job.label ? ` — ${job.label}` : "";
+  return `  [${job.id}] ${job.type} ${job.status} (${age})${agent}${label}`;
+}
+
+function cleanupReportText(snapshot: AsyncJobSnapshot | null, now: number): string {
+  if (!snapshot) return `后台异步任务在当前会话不可用。\n说明：${CLEANUP_NO_CANCEL_NOTE}`;
+  const lines: string[] = [];
+  if (snapshot.running.length === 0 && snapshot.recent.length === 0) {
+    lines.push("当前会话没有自己的后台异步任务（后台任务指 task 子代理等异步工具）。");
+  } else {
+    lines.push(`本会话的后台异步任务：${snapshot.running.length} 运行中 / ${snapshot.recent.length} 最近`);
+    if (snapshot.running.length > 0) {
+      lines.push("运行中：", ...snapshot.running.map((job) => formatJobLine(job, now)));
+    }
+    if (snapshot.recent.length > 0) {
+      lines.push("最近（含已完成/失败/已取消）：", ...snapshot.recent.map((job) => formatJobLine(job, now)));
+    }
+    const delivery = snapshot.delivery;
+    const retry =
+      delivery.nextRetryAt !== undefined ? `，下次重试 ${new Date(delivery.nextRetryAt).toISOString()}` : "";
+    lines.push(`投递状态：queued=${delivery.queued}，delivering=${delivery.delivering}${retry}`);
+  }
+  lines.push(`说明：${CLEANUP_NO_CANCEL_NOTE}`);
+  return lines.join("\n");
+}
+
+function cleanupReportJson(snapshot: AsyncJobSnapshot | null, sessionId: string, now: number): string {
+  return JSON.stringify(
+    {
+      command: "sc:cleanup",
+      mode: "readonly",
+      available: snapshot !== null,
+      generatedAt: new Date(now).toISOString(),
+      sessionId,
+      running: snapshot?.running ?? [],
+      recent: snapshot?.recent ?? [],
+      delivery: snapshot?.delivery ?? null,
+      mutation: {
+        cancel: false,
+        prune: false,
+        reason: "omp 18.1.13 exposes no public cancellation/prune API to extensions",
+      },
+    },
+    null,
+    2,
+  );
+}
+
 export default function iflowExtension(pi: ExtensionAPI): void {
   const commands = loadCommands();
 
@@ -366,6 +451,9 @@ export default function iflowExtension(pi: ExtensionAPI): void {
   }
 
   for (const cmd of commands) {
+    // 操作型命令（见 OPERATIONAL_COMMANDS）由下方直接注册处理器，这里跳过，
+    // 避免 sc:<name> 被注册两次。
+    if (OPERATIONAL_COMMANDS[cmd.name]) continue;
     pi.registerCommand(`${NAMESPACE}:${cmd.name}`, {
       description: cmd.description || `iflow V8 行为命令（${cmd.name}）`,
       handler: async (args: string) => {
@@ -381,12 +469,15 @@ export default function iflowExtension(pi: ExtensionAPI): void {
         "iflow (SuperClaude V8) — oh-my-pi 插件",
         "",
         "行为命令（将命令体展开为下一条提示）：",
-        ...commands.map((c) => `- /sc:${c.name}${c.description ? ` — ${c.description}` : ""}`),
+        ...commands.filter((c) => !OPERATIONAL_COMMANDS[c.name]).map((c) => `- /sc:${c.name}${c.description ? ` — ${c.description}` : ""}`),
+        "",
+        "状态命令（直接读取 omp 会话状态执行）：",
+        ...commands.filter((c) => OPERATIONAL_COMMANDS[c.name]).map((c) => `- /sc:${c.name}${c.description ? ` — ${c.description}` : ""}`),
         "",
         "安装：/sc:setup 写入用户级 AGENTS.md 条目；模型角色与回退链由你在 config.yml 配置。",
         "专家角色（task 工具）：包内 agents/ 目录，共 15 个角色。",
         "任务路由：未显式指定的角色会被分类，显式指定的角色予以保留。",
-        "模型角色：iflow 不注入映射；/sc:roles 展示 omp 内建角色的解析结果。子 Agent 自动继承其解析 Role 的思考深度（如 @slow:high）与 retry.fallbackChains 回退链。",
+        "模型角色：每个专家 Agent 在定义中声明复用的内建角色（@slow/@task），无需手动映射；iflow 不改写你的 config.yml，具体模型由该角色在 config.yml 的配置决定。/sc:roles 查看解析结果；子 Agent 自动继承其 Role 的思考深度（如 @slow:high）与 retry.fallbackChains 回退链。",
         "规则：iflow-sticky + iflow-framework（所有 agent）、iflow-dispatch（仅主会话）。",
       ];
       report(ctx, lines.join("\n"));
@@ -473,6 +564,40 @@ export default function iflowExtension(pi: ExtensionAPI): void {
         `请用 task 分派，建议 agent = ${suggestAgentFor(event)}。` +
         `临时关闭：/sc:dispatch off`,
     };
+  });
+
+  pi.registerCommand("sc:cleanup", {
+    description: "只读报告本会话拥有的后台异步任务快照（无取消/清理能力，见输出说明）",
+    handler: async (args: string, ctx) => {
+      const flags = splitArgs(typeof args === "string" ? args : "");
+      const unknown = flags.filter((flag) => flag.startsWith("-") && !["--json", "--help", "-h"].includes(flag));
+      if (unknown.length > 0) {
+        report(ctx, `未知参数：${unknown.join(", ")}。用法：/sc:cleanup [--json] [--help]`, "warning");
+        return;
+      }
+      if (flags.includes("--help") || flags.includes("-h")) {
+        report(
+          ctx,
+          [
+            "用法：/sc:cleanup [--json] [--help]",
+            "",
+            "只读列出当前会话拥有的后台异步任务（task 子代理等）与投递状态。",
+            "",
+            "限制（omp 18.1.13）：扩展 API 只有只读快照 ctx.getAsyncJobSnapshot()，",
+            "没有公开的取消/清理接口——本命令不会终止或删除任何任务。停止任务请用宿主机制",
+            "（TUI 按 Esc；内建 /jobs 查看）；已完成任务行由 omp 宿主约 5 分钟后自动淘汰。",
+          ].join("\n"),
+        );
+        return;
+      }
+      const now = Date.now();
+      const snapshot = ctx.getAsyncJobSnapshot();
+      if (flags.includes("--json")) {
+        report(ctx, cleanupReportJson(snapshot, ctx.sessionManager.getSessionId(), now));
+        return;
+      }
+      report(ctx, cleanupReportText(snapshot, now));
+    },
   });
 
   pi.on("session_start", async (_event, ctx) => {

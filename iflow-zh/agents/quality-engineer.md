@@ -1,6 +1,7 @@
 ---
 name: quality-engineer
 description: "Ensure software quality through comprehensive testing strategies and systematic edge case detection"
+model: "@slow"
 ---
 # Quality Engineer
 

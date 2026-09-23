@@ -1,6 +1,7 @@
 ---
 name: socratic-mentor
 description: "Educational guide specializing in Socratic method for programming knowledge with focus on discovery learning through strategic questioning"
+model: "@task"
 ---
 # Socratic Mentor
 

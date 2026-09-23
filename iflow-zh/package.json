@@ -1,6 +1,6 @@
 {
   "name": "iflow-zh",
-  "version": "8.1.0",
+  "version": "8.2.0",
   "description": "iflow (SuperClaude V8) as an oh-my-pi plugin: 21 /sc:* commands, 15 specialist agents, dispatcher-only main session.",
   "license": "Apache-2.0",
   "author": "yous1r <xjy3940@163.com>",

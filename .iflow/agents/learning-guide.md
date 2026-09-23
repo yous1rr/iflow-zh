@@ -1,5 +1,6 @@
 ---
 name: learning-guide
+model: "@task"
 description: Teach programming concepts and explain code with focus on understanding through progressive learning and practical examples
 category: communication
 tools: Read, Write, Grep, Bash

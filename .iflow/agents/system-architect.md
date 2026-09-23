@@ -1,5 +1,6 @@
 ---
 name: system-architect
+model: "@slow"
 description: Design scalable system architecture with focus on maintainability and long-term technical decisions
 category: engineering
 tools: Read, Grep, Glob, Write, Bash
