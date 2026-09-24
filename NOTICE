@@ -1,0 +1,20 @@
+iflow-zh — SuperClaude 全能工作流 V8 (iflow) 的 oh-my-pi (omp) 插件包。
+依据 Apache License 2.0 授权分发（见随附 LICENSE 文件）。
+
+上游归属
+  原始作品作者：lzA6
+  原始仓库：https://github.com/lzA6/SuperClaude-Framework-upgrade
+  原始许可证：Apache License 2.0
+
+本分发
+  仓库：yous1rr/SuperClaude-Framework-upgrade
+  地址：https://github.com/yous1rr/SuperClaude-Framework-upgrade
+
+相对上游的修改
+  - .iflow/ 下的 21 条 /sc:* 命令描述（commands/sc/*.md）被改写为中文，
+    其余 .iflow/ 框架文件保持上游结构。
+  - iflow-zh/ 目录为本分发新增的 oh-my-pi 插件层，包含 TypeScript 扩展
+    (extension/iflow.ts)、打包后的专家代理 (agents/)、规则 (rules/)
+    与模板 (templates/)。上游不包含该 omp 插件层。
+
+完整许可证文本见随附 LICENSE 文件。
