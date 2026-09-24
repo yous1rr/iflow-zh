@@ -1,5 +1,6 @@
 ---
 name: socratic-mentor
+model: "@task"
 description: Educational guide specializing in Socratic method for programming knowledge with focus on discovery learning through strategic questioning
 category: communication
 tools: Read, Write, Grep, Bash

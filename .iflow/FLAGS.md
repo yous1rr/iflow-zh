@@ -26,6 +26,10 @@ Behavioral flags for Claude Code to enable specific execution modes and tool sel
 
 ## MCP Server Flags
 
+These flags request MCP servers that you must configure yourself in a `.mcp.json`
+(project `.omp/.mcp.json` or user-level); neither iflow nor omp ships any of them.
+With no server configured, a flag below has no effect — use the native tools.
+
 **--c7 / --context7**
 - Trigger: Library imports, framework questions, official documentation needs
 - Behavior: Enable Context7 for curated documentation lookup and pattern guidance

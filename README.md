@@ -7,6 +7,8 @@
 [![Status](https://img.shields.io/badge/Status-Quantum%20Intelligence%20Ready-brightgreen)](https://github.com/lzA6/SuperClaude-Framework-upgrade)
 [![Repo Link](https://img.shields.io/badge/GitHub-lzA6/SuperClaude--Framework--upgrade-blue)](https://github.com/lzA6/SuperClaude-Framework-upgrade)
 
+> **上游与许可**：本项目派生自 `lzA6` 的原作 `https://github.com/lzA6/SuperClaude-Framework-upgrade`；本分叉为 `https://github.com/yous1rr/SuperClaude-Framework-upgrade`。许可为 **Apache License 2.0**，与上游一致，详见 `LICENSE`。本分叉改动了 `.iflow/` 下的框架文件（含 21 条 `/sc:*` 命令描述改为中文），并新增了 `iflow-zh/` 这一层 oh-my-pi 插件。
+
 ---
 
 ## 🧠 序言：我们的哲学与价值观
@@ -37,6 +39,7 @@ SuperClaude V8 版本代号为 **“量子智能终极版”**，它在核心架
 | 🧠 **多模型神经适配层 V2 (Neural Adapter V2)** | **智能模型选择与优化路由。** 实现了 100% 兼容所有主流 LLM 模型的能力。它使用 **神经网络路由器 (Neural Network Router)** 智能评估任务需求、模型性能和成本，自动选择最合适的模型，并进行 **量子增强处理** 和 **智能缓存管理**。 | `core/multi_model_neural_adapter_v2.py` |
 | 🌟 **全能万金油终极专家 V8 (Omni Agent)** | **超级智能体。** 融合了所有专业知识和 V8 核心架构的“大脑”。它具备 **无限学习能力** 和 **自主决策能力**，追求 100% 任务完成率。 | `agents/core/universal-omni-agent-v8.md` |
 | 🔬 **系统对比测试框架** | **质量保障的基石。** 用于多维度对比新旧系统在输出质量、完整性、效率和创新性上的差异，确保每一次升级都是真正的进步。 | `tests/system_comparison_framework.py` |
+| 🥧 **oh-my-pi 插件支持** | **跨客户端运行。** 通过 `iflow-zh` omp 插件包（TypeScript 扩展 + 任务代理 + 规则），同一套 `.iflow/` 框架可直接驱动 [oh-my-pi](https://github.com/can1357/oh-my-pi) (omp)，`/sc:*` 命令体验与 Claude Code 完全一致，装一次全局生效。 | `iflow-zh/extension/iflow.ts` |
 
 ---
 
@@ -51,20 +54,25 @@ SuperClaude 框架旨在通过简单的命令，调用复杂的 AI 智能体和�
 **步骤 1：克隆仓库**
 
 ```bash
-# 访问您的 GitHub 仓库链接：https://github.com/lzA6/SuperClaude-Framework-upgrade
-git clone https://github.com/lzA6/SuperClaude-Framework-upgrade.git iflow
+# 克隆本分叉仓库：https://github.com/yous1rr/SuperClaude-Framework-upgrade
+git clone https://github.com/yous1rr/SuperClaude-Framework-upgrade.git iflow
 cd iflow
 ```
 
-**步骤 2：运行初始化脚本 (概念性)**
+**步骤 2：安装 iflow-zh 插件（机器级，一次装，全部项目生效）**
 
-在实际的 SuperClaude 框架中，您通常会有一个初始化脚本来设置环境和依赖。
+iflow 工作流通过一个 omp 插件包 `iflow-zh` 分发。装一次，这台机器上每个目录起的每个 omp 会话都自动拿到全部 `/sc:*` 命令、15 个专家 Agent 和 iflow 规则——不需要往任何项目里拷文件。
 
 ```bash
-# 假设的初始化命令，用于设置核心组件和依赖
-# 实际操作中，您可能需要配置您的 LLM API 密钥
-python3 setup.py install_v8_core
+# 在 omp 会话外执行，等价于在会话内跑 /sc:setup 的那一步
+npx iflow-zh
+# 或分两步：先装插件，再进会话跑 /sc:setup
+# omp plugin install iflow-zh
+# omp
+# /sc:setup
 ```
+
+`/sc:setup` 把 `modelRoles.default` 和 `task.agentModelOverrides` 合并进 `~/.omp/agent/config.yml`、写 `~/.omp/agent/AGENTS.md`，各先留 `.bak`，不会覆盖你已经选过的值。
 
 **步骤 3：加载项目上下文**
 
@@ -86,6 +94,50 @@ python3 setup.py install_v8_core
 | **3. 核心实现** | `/sc:implement login-api --with-tests` | 激活 **全能专家 V8**，自动协调 **后端架构师** 和 **安全工程师**，生成代码并集成测试。 | `commands/sc/implement.md` |
 | **4. 质量提升** | `/sc:improve src/auth --type quality` | 激活 **重构专家**，系统性地优化代码质量、性能和可维护性。 | `commands/sc/improve.md` |
 | **5. 总结反思** | `/sc:reflect --type session` | 激活 **内省模式**，让 AI 总结本次会话的得失，并将经验沉淀到 **意识流系统** 中。 | `MODE_Introspection.md` |
+
+### 4. 在 oh-my-pi (omp) 中使用（插件支持）
+
+iflow 工作流打包成一个 omp 插件 `iflow-zh`，装一次就全局生效，`.iflow/` 保持仓库唯一事实源，运行时一切来自已安装的插件根，与 cwd 无关。
+
+**步骤 1：安装 omp**（Windows 示例，macOS/Linux 见 omp 官网）
+
+```powershell
+irm https://omp.sh/install.ps1 | iex
+```
+
+**步骤 2：安装 iflow-zh 插件并在任意目录启动 omp**
+
+```bash
+omp plugin install iflow-zh   # 装一次，这台机器每个项目都生效
+omp                           # 在任意项目目录里直接起
+```
+
+首次使用按提示跑一次 `/sc:setup`（合并模型角色映射、写用户级 `AGENTS.md`，各留 `.bak`，不覆盖你已选的值）。装完无需往项目里拷任何文件。
+
+插件安装后，会话启动时自动加载以下组件（路径相对于已安装的插件根 `iflow-zh/`）：
+
+| 插件组件 | 作用 |
+| :--- | :--- |
+| `extension/iflow.ts` | 注册全部 21 个 `/sc:*` 命令；把主会话收窄为调度者工具集（落地工具移出工具表）；路由 `task` 调用到对应专家；`tool_call` 钩子兜底门禁剩余入口 |
+| `agents/*.md` | 15 个专家 Agent 定义，被 omp task-agent 发现扫描，可被 `task` 工具按名称委派 |
+| `rules/iflow-sticky.md` | 执行方硬约束（安全、零错误容忍、不留 TODO 等），随 `task` 转发到每个专家 Agent |
+| `rules/iflow-dispatch.md` | 调度者指令（仅主会话可见），要求落地动作一律走 `task` 分派 |
+| `framework/` | `@` 导入链（`IFLOW.md` 拉入旗帜/模式/规则）+ `commands/sc/*.md` 的 21 条命令正文，按 `import.meta.url` 解析 |
+| `templates/` | `/sc:setup` 合并进用户级 `config.yml` 与 `AGENTS.md` 的模板 |
+
+主会话进入调度者模式后默认不直接 `edit`/`write`，需要自己改文件时用 `/sc:dispatch off` 临时放开。调度者模式同样作用于 `omp -p` 和 `omp --mode json`：headless 主会话一样被收窄、被门禁兜底，启动时加 `--sc-dispatch off` 可以在任意模式下一关到底。headless 下扩展的状态信息走 stderr，stdout 保持机器可读（`--mode json` 逐行 JSON、文本模式输出最终助手消息）。headless 调度者没有 `ask` 工具，所以 `-p` 的提示必须自包含——它不能在运行中途问用户。
+
+**步骤 3：像在 Claude Code 中一样使用**
+
+```bash
+/sc:implement 用户认证模块 --with-tests
+/sc:troubleshoot 登录超时问题
+/sc          # 列出全部 /sc:* 命令、代理与模式
+```
+
+- 命令全文（触发条件、行为流程、输出格式）由扩展注入为下一条用户提示，行为与 Claude Code 文件命令一致
+- 改了 `extension/iflow.ts` 或钩子后需要重启会话才生效（`/reload-plugins` 只刷新命令，不重载扩展模块）
+- 修改 `.iflow/agents/` 或 `.iflow/commands/` 后，贡献者运行 `node iflow-zh/scripts/build-agents.mjs` 从 `.iflow/` 重新生成 `iflow-zh/agents/` 与 `iflow-zh/framework/`，并断言没有悬空或未映射的 Agent 名（这是贡献者步骤，普通用户不需要跑）
 
 ---
 
@@ -129,7 +181,7 @@ python3 setup.py install_v8_core
 | **技术深度** | **知识沉淀与复用**：意识流系统将每一次经验转化为 LTM，让 AI 变得越来越聪明，避免重复犯错，实现真正的 **无限学习**。 |
 | **工程质量** | **内置质量与安全**：ARQ V2.0 的合规内核和形式化验证，将安全、质量、伦理检查前置到推理阶段，从源头保障了代码的可靠性。 |
 | **开发者体验 (UX)** | **无感知的智能路由**：开发者无需关心使用哪个 LLM 模型，神经适配层 V2 会自动选择性能最好、成本最低的模型，实现丝滑的开发体验。 |
-| **哲学与三观** | **正确的价值观引导**：框架内置的 `PRINCIPLES.md` 和 `RULES.md` 强调 **证据 > 假设**、**质量 > 速度**，鼓励开发者形成严谨、正直的工程思维。 |
+| **哲学与三观** | **正确的价值观引导**：框架内置的 `iflow-sticky.md`（执行方硬约束）强调 **证据 > 假设**、**质量 > 速度**，鼓励开发者形成严谨、正直的工程思维。 |
 
 ### 2. 优缺点与便利性 (Pros, Cons & Convenience)
 
@@ -189,37 +241,60 @@ python3 setup.py install_v8_core
 以下是项目的完整文件结构，方便用户和 AI 爬虫快速理解仓库布局：
 
 ```
-📂 iflow/
+📂 .iflow/                          # 仓库唯一事实源（框架源码，不直接分发）
     📄 .superclaude-metadata.json  # 框架元数据，版本信息
     📄 CHANGELOG-V8.md             # V8 升级日志
     📄 FLAGS.md                    # 行为模式激活标志
-    📄 IFLOW.md                    # 框架入口文件
+    📄 IFLOW.md                    # 框架入口文件（@ 导入旗帜/模式/规则）
     📄 MODE_*.md                   # 5种行为模式定义
-    📄 PRINCIPLES.md               # 核心工程原则
-    📄 RULES.md                    # 行为规则与合规要求
-    
+    📄 RULES.md                    # 行为规则与合规要求（调度者侧内容）
+
     📂 agents/                     # 智能体定义目录
         📄 *.md                    # 14个专业智能体定义
         📂 core/
             📄 universal-omni-agent-v8.md # 全能专家 V8 核心定义
-            
+
     📂 commands/                   # 命令行工具目录
         📂 sc/
             📄 analyze.md          # 21个核心命令定义
             📄 brainstorm.md
             # ... (其他命令)
             📄 workflow.md
-            
-    📂 core/                       # V8 核心架构实现
+
+    📂 core/                       # V8 核心架构实现（仓库内设计文献，不进插件包）
         📄 arq_reasoning_engine_v2.py      # ARQ V2.0 推理内核
         📄 consciousness_stream.py         # 意识流系统
         📄 multi_model_neural_adapter_v2.py # 多模型神经适配层 V2
-        
-    📂 tests/                      # 测试与质量保障
+
+    📂 tests/                      # 测试与质量保障（仓库内，不进插件包）
         📄 system_comparison_framework.py # 系统对比测试框架
-    
-    # 📂 backups/                  # 备份目录
-    # 📂 logs/                     # 日志目录
+
+    📂 logs/                        # 日志目录（仓库内，不进插件包）
+    📂 backups/                    # 备份目录（仓库内，不进插件包）
+
+📂 iflow-zh/                       # 可分发的 omp 插件包（由 build-agents.mjs 从 .iflow/ 生成）
+    📄 package.json                # omp.extensions / bin 入口
+    📂 extension/                  # TypeScript 扩展 + setup 写入器
+        📄 iflow.ts                # 注册 /sc:* 命令、收窄主会话、路由 task、门禁落地工具
+        📄 setup.mjs               # /sc:setup 与 npx 共用的配置合并器
+    📂 bin/                        # npx 入口
+        📄 install.mjs
+    📂 agents/                     # 15 个 omp 任务代理（构建期生成）
+        📄 *.md
+    📂 rules/                      # 随 task 转发的规则
+        📄 iflow-sticky.md         # 执行方硬约束，全 Agent 生效
+        📄 iflow-dispatch.md       # 调度者指令，仅主会话生效
+    📂 framework/                  # 纯数据，extension 按 import.meta.url 读取
+        📄 IFLOW.md  FLAGS.md  RULES.md  MODE_*.md
+        📂 commands/sc/            # 21 个命令正文
+    📂 templates/                  # /sc:setup 合并进用户级配置的模板
+        📄 AGENTS.md  config.patch.yml
+    📂 scripts/
+        📄 build-agents.mjs         # .iflow/ → agents/ + framework/，并做一致性校验
+
+📂 .omp/                          # 本仓库的项目级 omp 覆盖（非必需，插件已全局生效）
+    📄 AGENTS.md                  # 项目上下文入口（@ 导入 .iflow 组件，装插件前可用）
+    📄 config.yml                 # 项目级模型/工具设置覆盖
 ```
 
 ---
@@ -238,7 +313,7 @@ python3 setup.py install_v8_core
 
 **复刻/升级路径：**
 
-1.  **核心启动**：从 `IFLOW.md` 启动，加载 `PRINCIPLES.md` 和 `RULES.md` 作为全局约束。
+1.  **核心启动**：从 `IFLOW.md` 启动，`iflow-zh` 插件把执行方硬约束（`rules/iflow-sticky.md`，随 `task` 转发到每个专家）和调度者指令（`rules/iflow-dispatch.md`，仅主会话）作为全局约束注入。
 2.  **任务接收**：用户输入命令（如 `/sc:task`），命令解析器激活 **Omni Agent V8**。
 3.  **深度思考**：Omni Agent 调用 **ARQ V2** 进行结构化推理，同时查询 **意识流系统** 获取 LTM 和预测。
 4.  **模型选择**：推理完成后，调用 **NNA V2** 智能选择最佳 LLM 模型，并发送请求。

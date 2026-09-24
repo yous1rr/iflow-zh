@@ -1,0 +1,23 @@
+# Merged into ~/.omp/agent/config.yml by iflow-zh's /sc:setup (or `npx iflow-zh`).
+#
+# iflow deliberately seeds NO model configuration: no `modelRoles` entries and
+# no `task.agentModelOverrides`. Providers and models stay fully
+# user-controlled (`/model`, `modelRoles` in your own config.yml).
+#
+# Subagent network-failure fallback is omp's native mechanism and needs no
+# setup: a `task` subagent whose Role resolves to `@slow`/`@task`/`@smol`
+# inherits the `retry.fallbackChains` chain configured for that role (falling
+# back to the `default` chain; explicit model selectors inherit `default`).
+# To enable it, configure chains in your own config.yml, e.g.:
+#
+# retry:
+#   fallbackChains:
+#     default: ["openai/gpt-4o-mini"]
+#     slow: ["openai/gpt-4o-mini"]
+#
+# Keys accept role names, "provider/model-id" selectors, or "provider/*"
+# wildcards; values are ordered fallback selectors. Recovery is on by default
+# (`retry.modelFallback: true`). See omp's `retry.fallbackChains` setting.
+#
+# This file currently owns no keys, so /sc:setup writes nothing into
+# config.yml — and anything you set there yourself is never touched.

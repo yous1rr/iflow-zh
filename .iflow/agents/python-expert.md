@@ -1,5 +1,6 @@
 ---
 name: python-expert
+model: "@task"
 description: Deliver production-ready, secure, high-performance Python code following SOLID principles and modern best practices
 category: specialized
 tools: Read, Write, Edit, MultiEdit, Bash, Grep

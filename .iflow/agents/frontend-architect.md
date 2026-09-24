@@ -1,5 +1,6 @@
 ---
 name: frontend-architect
+model: "@task"
 description: Create accessible, performant user interfaces with focus on user experience and modern frameworks
 category: engineering
 tools: Read, Write, Edit, MultiEdit, Bash

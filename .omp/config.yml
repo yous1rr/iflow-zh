@@ -1,0 +1,36 @@
+# Project-shared task policy for iflow.
+# Concrete models remain user-controlled through OMP built-in Roles.
+
+modelRoles:
+  # The interactive parent session uses the strong reasoning Role.
+  default: "@slow"
+
+task:
+  agentModelOverrides:
+    # The coordinator Agent, when explicitly spawned, uses the strong Role.
+    universal-omni-agent-v8: "@slow"
+
+    # Fast, bounded, read-oriented work.
+    sonic: "@smol"
+    scout: "@smol"
+
+    # Concrete implementation and routine documentation work.
+    task: "@task"
+    technical-writer: "@task"
+    learning-guide: "@task"
+    socratic-mentor: "@task"
+    python-expert: "@task"
+    frontend-architect: "@task"
+    devops-architect: "@task"
+    requirements-analyst: "@task"
+    refactoring-expert: "@task"
+
+    # High-risk reasoning, review, and cross-module work.
+    reviewer: "@slow"
+    security-reviewer: "@slow"
+    system-architect: "@slow"
+    backend-architect: "@slow"
+    security-engineer: "@slow"
+    root-cause-analyst: "@slow"
+    performance-engineer: "@slow"
+    quality-engineer: "@slow"

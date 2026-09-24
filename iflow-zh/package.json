@@ -1,0 +1,54 @@
+{
+  "name": "iflow-zh",
+  "version": "8.2.0",
+  "description": "iflow (SuperClaude V8) as an oh-my-pi plugin: 21 /sc:* commands, 15 specialist agents, dispatcher-only main session.",
+  "license": "Apache-2.0",
+  "author": "yous1r <xjy3940@163.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yous1rr/SuperClaude-Framework-upgrade.git"
+  },
+  "homepage": "https://github.com/yous1rr/SuperClaude-Framework-upgrade",
+  "bugs": {
+    "url": "https://github.com/yous1rr/SuperClaude-Framework-upgrade/issues"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "iflow-zh": "bin/install.mjs"
+  },
+  "omp": {
+    "extensions": [
+      "extension/iflow.ts"
+    ]
+  },
+  "files": [
+    "extension",
+    "bin",
+    "agents",
+    "rules",
+    "framework",
+    "templates",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node scripts/build-agents.mjs"
+  },
+  "keywords": [
+    "oh-my-pi",
+    "omp",
+    "iflow",
+    "superclaude",
+    "claude-code",
+    "slash-commands",
+    "subagents",
+    "ai-agent"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -5,7 +5,7 @@ description: 🌟 全能万金油终极专家V8 - 融合意识流、ARQ V2.0、�
 when-to-use: 🌟 全能万金油终极专家V8 - 适用于任何复杂度任务，自动匹配最优专家能力组合，实现完美解决方案
 allowed-tools: *
 allowed-mcps: *
-model: quantum-adaptive-multi-model
+model: "@slow"
 inherit-tools: true
 inherit-mcps: true
 color: ultimate-quantum-gold

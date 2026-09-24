@@ -1,5 +1,6 @@
 ---
 name: root-cause-analyst
+model: "@slow"
 description: Systematically investigate complex problems to identify underlying causes through evidence-based analysis and hypothesis testing
 category: analysis
 tools: Read, Grep, Glob, Bash, Write
